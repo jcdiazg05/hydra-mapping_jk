@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Mi Estudio Hydra Mapping</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #eee;
+    }
+
+    /* Panel flotante del editor y controles */
+    #ui-panel {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      width: 380px;
+      background: rgba(15, 15, 20, 0.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px;
+      z-index: 100;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+      transition: opacity 0.2s ease;
+    }
+
+    #ui-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #00ffcc;
+    }
+
+    textarea#hydra-code {
+      width: 100%;
+      height: 180px;
+      background: #0a0a0d;
+      color: #00ff88;
+      border: 1px solid #2a2a35;
+      border-radius: 4px;
+      padding: 8px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      resize: vertical;
+      outline: none;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    button, select {
+      background: #1f1f29;
+      color: #fff;
+      border: 1px solid #3d3d4d;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    button:hover { background: #2f2f3d; border-color: #00ffcc; }
+    button.primary { background: #007a63; border-color: #00ffcc; font-weight: bold; }
+    button.primary:hover { background: #009e80; }
+    button.danger:hover { border-color: #ff4466; color: #ff4466; }
+
+    #surfaces-list {
+      margin-top: 10px;
+      max-height: 140px;
+      overflow-y: auto;
+      border-top: 1px solid #2a2a35;
+      padding-top: 8px;
+    }
+
+    .surface-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #16161d;
+      padding: 5px 8px;
+      margin-bottom: 5px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .shortcuts {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #888;
+      line-height: 1.5;
+      border-top: 1px solid #2a2a35;
+      padding-top: 6px;
+    }
+    .shortcuts b { color: #ccc; }
+  </style>
+
+  <!-- Librerías principales -->
+  <script src="https://unpkg.com/hydra-synth"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+</head>
+<body>
+
+  <div id="ui-panel">
+    <div id="ui-header">
+      <span>HYDRA MAPPING STUDIO</span>
+      <span id="status-badge" style="color:#00ff88; font-size:11px;">● Activo</span>
+    </div>
+
+    <textarea id="hydra-code" spellcheck="false"></textarea>
+
+    <div class="toolbar">
+      <button class="primary" onclick="runHydraCode()">▶ Ejecutar (Ctrl+Enter)</button>
+      <button onclick="addSurface()">+ Superficie</button>
+      <button onclick="toggleCalibration()" id="btn-calib">Calibrar: ON</button>
+      <button onclick="resetAll()" class="danger">Reset</button>
+    </div>
+
+    <!-- Lista de superficies activas -->
+    <div id="surfaces-list"></div>
+
+    <div class="shortcuts">
+      <b>Atajos:</b> [<b>C</b>] Modo Calibración | [<b>H</b>] Ocultar/Mostrar Panel | [<b>F11</b>] Pantalla Completa
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. CONFIGURACIÓN INICIAL Y ESTADO
+    // ==========================================
+    const DEFAULT_CODE = `// Salida o0 (Cara 1)
+osc(15, 0.1, 0.8).rotate(0.4).kaleid(4).out(o0)
+
+// Salida o1 (Cara 2)
+voronoi(6, 0.3, 0.5).color(0.1, 0.7, 1).out(o1)
+
+// Salida o2 (Cara 3)
+noise(3, 0.2).posterize(4).color(1, 0.2, 0.5).out(o2)
+
+// Salida o3 (Cara 4)
+shape(4, 0.5, 0.01).repeat(3, 3).rotate(() => time * 0.5).out(o3)
+
+// Renderiza los 4 buffers en cuadrícula interna para mapearlos
+render()`;
+
+    // Mapeo UV correspondiente a la cuadrícula 2x2 de render() en Hydra
+    const BUFFER_UVS = {
+      o0: [0.0, 0.0, 0.5, 0.5], // Arriba Izquierda
+      o1: [0.5, 0.0, 1.0, 0.5], // Arriba Derecha
+      o2: [0.0, 0.5, 0.5, 1.0], // Abajo Izquierda
+      o3: [0.5, 0.5, 1.0, 1.0]  // Abajo Derecha
+    };
+
+    let surfaces = [];
+    let calibrating = true;
+    let selectedPoint = null;
+    let selectedSurface = null;
+    let dragOffset = { x: 0, y: 0 };
+
+    // ==========================================
+    // 2. MOTOR HYDRA
+    // ==========================================
+    const hydraCanvas = document.createElement("canvas");
+    hydraCanvas.width = 1280;
+    hydraCanvas.height = 720;
+
+    const hydra = new Hydra({
+      canvas: hydraCanvas,
+      detectAudio: true, // Permite usar a.fft[] con el micrófono
+      makeGlobal: true
+    });
+
+    function runHydraCode() {
+      const code = document.getElementById("hydra-code").value;
+      localStorage.setItem("my_hydra_code", code);
+      try {
+        eval(code);
+        updateStatus("● Código ejecutado", "#00ff88");
+      } catch (err) {
+        console.error(err);
+        updateStatus("● Error de sintaxis", "#ff4466");
+      }
+    }
+
+    function updateStatus(text, color) {
+      const badge = document.getElementById("status-badge");
+      badge.innerText = text;
+      badge.style.color = color;
+    }
+
+    // ==========================================
+    // 3. GESTIÓN DE SUPERFICIES (QUADS)
+    // ==========================================
+    function loadState() {
+      const savedCode = localStorage.getItem("my_hydra_code");
+      document.getElementById("hydra-code").value = savedCode || DEFAULT_CODE;
+
+      const savedSurfaces = localStorage.getItem("my_hydra_surfaces");
+      if (savedSurfaces) {
+        surfaces = JSON.parse(savedSurfaces);
+      } else {
+        // Crear 2 superficies por defecto
+        surfaces = [
+          {
+            id: Date.now(),
+            buffer: "o0",
+            pts: [{x: 450, y: 120}, {x: 750, y: 120}, {x: 750, y: 420}, {x: 450, y: 420}]
+          },
+          {
+            id: Date.now() + 1,
+            buffer: "o1",
+            pts: [{x: 800, y: 150}, {x: 1100, y: 100}, {x: 1100, y: 450}, {x: 800, y: 400}]
+          }
+        ];
+      }
+      renderSurfaceUI();
+    }
+
+    function saveSurfaces() {
+      localStorage.setItem("my_hydra_surfaces", JSON.stringify(surfaces));
+    }
+
+    function addSurface() {
+      const buffers = ["o0", "o1", "o2", "o3"];
+      const nextBuffer = buffers[surfaces.length % 4];
+      const offset = (surfaces.length * 30) % 200;
+
+      surfaces.push({
+        id: Date.now(),
+        buffer: nextBuffer,
+        pts: [
+          {x: 500 + offset, y: 200 + offset},
+          {x: 750 + offset, y: 200 + offset},
+          {x: 750 + offset, y: 450 + offset},
+          {x: 500 + offset, y: 450 + offset}
+        ]
+      });
+      saveSurfaces();
+      renderSurfaceUI();
+    }
+
+    function removeSurface(id) {
+      surfaces = surfaces.filter(s => s.id !== id);
+      saveSurfaces();
+      renderSurfaceUI();
+    }
+
+    function changeSurfaceBuffer(id, newBuffer) {
+      const s = surfaces.find(item => item.id === id);
+      if (s) {
+        s.buffer = newBuffer;
+        saveSurfaces();
+      }
+    }
+
+    function renderSurfaceUI() {
+      const container = document.getElementById("surfaces-list");
+      container.innerHTML = "";
+      surfaces.forEach((s, index) => {
+        const div = document.createElement("div");
+        div.className = "surface-item";
+        div.innerHTML = `
+          <span>Cara #${index + 1}</span>
+          <div>
+            <select onchange="changeSurfaceBuffer(${s.id}, this.value)">
+              <option value="o0" ${s.buffer === 'o0' ? 'selected' : ''}>Buffer o0</option>
+              <option value="o1" ${s.buffer === 'o1' ? 'selected' : ''}>Buffer o1</option>
+              <option value="o2" ${s.buffer === 'o2' ? 'selected' : ''}>Buffer o2</option>
+              <option value="o3" ${s.buffer === 'o3' ? 'selected' : ''}>Buffer o3</option>
+            </select>
+            <button class="danger" onclick="removeSurface(${s.id})" style="padding:2px 6px; margin-left:4px;">✕</button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function toggleCalibration() {
+      calibrating = !calibrating;
+      document.getElementById("btn-calib").innerText = `Calibrar: ${calibrating ? 'ON' : 'OFF'}`;
+    }
+
+    function resetAll() {
+      if (confirm("¿Restaurar código y posiciones iniciales?")) {
+        localStorage.removeItem("my_hydra_code");
+        localStorage.removeItem("my_hydra_surfaces");
+        location.reload();
+      }
+    }
+
+    // ==========================================
+    // 4. MOTOR P5.JS (WEBGL MAPPING)
+    // ==========================================
+    let hydraGraphics;
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight, WEBGL);
+      hydraGraphics = createGraphics(1280, 720);
+      textureMode(NORMAL);
+      loadState();
+      runHydraCode();
+    }
+
+    function draw() {
+      background(0);
+      // Mover origen del centro de la pantalla a la esquina superior izquierda
+      translate(-width / 2, -height / 2);
+
+      // Volcar el frame actual de Hydra a la textura de p5
+      hydraGraphics.drawingContext.drawImage(hydraCanvas, 0, 0, 1280, 720);
+
+      surfaces.forEach((s, idx) => {
+        const uv = BUFFER_UVS[s.buffer];
+
+        // Dibujar el polígono texturizado
+        noStroke();
+        texture(hydraGraphics);
+        beginShape();
+        vertex(s.pts[0].x, s.pts[0].y, uv[0], uv[1]);
+        vertex(s.pts[1].x, s.pts[1].y, uv[2], uv[1]);
+        vertex(s.pts[2].x, s.pts[2].y, uv[2], uv[3]);
+        vertex(s.pts[3].x, s.pts[3].y, uv[0], uv[3]);
+        endShape(CLOSE);
+
+        // Guías visuales si está activo el modo calibración
+        if (calibrating) {
+          noFill();
+          stroke(0, 255, 204);
+          strokeWeight(1.5);
+          beginShape();
+          s.pts.forEach(p => vertex(p.x, p.y));
+          endShape(CLOSE);
+
+          // Dibujar los 4 nodos arrastrables
+          s.pts.forEach((p, pIdx) => {
+            fill(pIdx === 0 ? "#ff0066" : "#00ffcc");
+            noStroke();
+            ellipse(p.x, p.y, 14, 14);
+          });
+        }
+      });
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    // ==========================================
+    // 5. INTERACCIÓN DE MOUSE Y TECLADO
+    // ==========================================
+    function mousePressed() {
+      if (!calibrating) return;
+      // Verificar si se hizo clic cerca de un vértice
+      for (let s of surfaces) {
+        for (let p of s.pts) {
+          if (dist(mouseX, mouseY, p.x, p.y) < 15) {
+            selectedPoint = p;
+            return;
+          }
+        }
+      }
+    }
+
+    function mouseDragged() {
+      if (selectedPoint) {
+        selectedPoint.x = mouseX;
+        selectedPoint.y = mouseY;
+      }
+    }
+
+    function mouseReleased() {
+      if (selectedPoint) {
+        selectedPoint = null;
+        saveSurfaces(); // Guardar nueva posición automáticamente
+      }
+    }
+
+    // Atajos en el editor de texto
+    document.getElementById("hydra-code").addEventListener("keydown", (e) => {
+      if (e.ctrlKey && e.key === "Enter") {
+        e.preventDefault();
+        runHydraCode();
+      }
+    });
+
+    // Atajos globales (fuera del textarea)
+    window.addEventListener("keydown", (e) => {
+      if (document.activeElement.tagName === "TEXTAREA") return;
+      if (e.key.toLowerCase() === "c") toggleCalibration();
+      if (e.key.toLowerCase() === "h") {
+        const panel = document.getElementById("ui-panel");
+        panel.style.display = panel.style.display === "none" ? "block" : "none";
+      }
+    });
+  </script>
+</body>
+</html>
