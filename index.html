@@ -158,7 +158,7 @@ render()`;
     let calibrating = true;
     let selectedPoint = null;
 
-    // Inicializar Hydra v1.3.29 (incluye noise, osc, voronoi, shape, etc. nativos)
+    // 1. Inicializar Hydra
     const hydraCanvas = document.createElement("canvas");
     hydraCanvas.width = 1280;
     hydraCanvas.height = 720;
@@ -168,6 +168,24 @@ render()`;
       detectAudio: true,
       makeGlobal: true
     });
+
+    // 2. Exportar explícitamente todos los métodos y prototipos de Hydra (noise, osc, voronoi, etc.)
+    const synthInstance = hydra.synth || hydra;
+    Object.getOwnPropertyNames(synthInstance).forEach((key) => {
+      if (typeof synthInstance[key] === "function") {
+        window[key] = synthInstance[key].bind(synthInstance);
+      } else {
+        window[key] = synthInstance[key];
+      }
+    });
+    const proto = Object.getPrototypeOf(synthInstance);
+    if (proto) {
+      Object.getOwnPropertyNames(proto).forEach((key) => {
+        if (key !== "constructor" && typeof synthInstance[key] === "function") {
+          window[key] = synthInstance[key].bind(synthInstance);
+        }
+      });
+    }
 
     window.loadScript = (url) => {
       return new Promise((resolve, reject) => {
@@ -181,12 +199,12 @@ render()`;
 
     async function runHydraCode() {
       const code = document.getElementById("hydra-code").value;
-      localStorage.setItem("my_hydra_code_v2", code);
+      localStorage.setItem("my_hydra_code_v3", code);
       try {
         await eval(`(async () => { ${code} })()`);
         updateStatus("● Código ejecutado", "#00ff88");
       } catch (err) {
-        console.error(err);
+        console.error("Detalle del error Hydra:", err);
         updateStatus(`● Error: ${err.message}`, "#ff4466");
       }
     }
@@ -198,7 +216,7 @@ render()`;
     }
 
     function loadState() {
-      const savedCode = localStorage.getItem("my_hydra_code_v2");
+      const savedCode = localStorage.getItem("my_hydra_code_v3");
       document.getElementById("hydra-code").value = savedCode || DEFAULT_CODE;
 
       const savedSurfaces = localStorage.getItem("my_hydra_surfaces");
@@ -287,12 +305,13 @@ render()`;
 
     function resetAll() {
       if (confirm("¿Restaurar código y posiciones iniciales?")) {
-        localStorage.removeItem("my_hydra_code_v2");
+        localStorage.removeItem("my_hydra_code_v3");
         localStorage.removeItem("my_hydra_surfaces");
         location.reload();
       }
     }
 
+    // 3. Motor p5.js en modo instancia para deformación de superficies
     new p5((p) => {
       let hydraGraphics;
 
@@ -370,6 +389,7 @@ render()`;
       };
     });
 
+    // 4. Atajos de teclado
     document.getElementById("hydra-code").addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.key === "Enter") {
         e.preventDefault();
