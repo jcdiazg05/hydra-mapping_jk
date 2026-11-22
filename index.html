@@ -181,15 +181,15 @@ render()`;
       makeGlobal: true
     });
 
-    function runHydraCode() {
+   async function runHydraCode() {
       const code = document.getElementById("hydra-code").value;
       localStorage.setItem("my_hydra_code", code);
       try {
-        eval(code);
+        await eval(`(async () => { ${code} })()`);
         updateStatus("● Código ejecutado", "#00ff88");
       } catch (err) {
         console.error(err);
-        updateStatus("● Error de sintaxis", "#ff4466");
+        updateStatus(`● Error: ${err.message}`, "#ff4466");
       }
     }
 
