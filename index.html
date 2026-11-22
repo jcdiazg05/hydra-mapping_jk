@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Mi Estudio Hydra Mapping</title>
+  <title>Mi Estudio Hydra Mapping (8 Buffers)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body, html {
@@ -76,7 +76,7 @@
 
     #surfaces-list {
       margin-top: 10px;
-      max-height: 140px;
+      max-height: 150px;
       overflow-y: auto;
       border-top: 1px solid #2a2a35;
       padding-top: 8px;
@@ -108,7 +108,7 @@
 
   <div id="ui-panel">
     <div id="ui-header">
-      <span>HYDRA MAPPING STUDIO</span>
+      <span>HYDRA MAPPING (o0 - o7)</span>
       <span id="status-badge" style="color:#00ff88; font-size:11px;">● Iniciando...</span>
     </div>
 
@@ -124,73 +124,93 @@
     <div id="surfaces-list"></div>
 
     <div class="shortcuts">
-      <b>Atajos:</b> [<b>C</b>] Modo Calibración | [<b>H</b>] Ocultar/Mostrar Panel | [<b>F11</b>] Pantalla Completa
+      <b>Atajos:</b> [<b>C</b>] Calibrar | [<b>H</b>] Ocultar Panel | [<b>F11</b>] Pantalla Completa
     </div>
   </div>
 
-  <!-- Scripts cargados DESPUÉS de que el body exista -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script src="https://unpkg.com/hydra-synth@1.3.29/dist/hydra-synth.js"></script>
 
   <script>
-    const DEFAULT_CODE = `// Salida o0 (Cara 1)
+    const DEFAULT_CODE = `// Banco 1 (o0 - o3)
 osc(15, 0.1, 0.8).rotate(0.4).kaleid(4).out(o0)
-
-// Salida o1 (Cara 2)
 voronoi(6, 0.3, 0.5).color(0.1, 0.7, 1).out(o1)
-
-// Salida o2 (Cara 3)
 noise(3, 0.2).posterize(4).color(1, 0.2, 0.5).out(o2)
-
-// Salida o3 (Cara 4)
 gradient(1).rotate(() => time * 0.5).out(o3)
 
-render()`;
+// Banco 2 (o4 - o7)
+shape(4, 0.5, 0.01).repeat(3, 3).out(o4)
+osc(30, 0.05).thresh(0.5).out(o5)
+noise(8).color(0.2, 1, 0.4).out(o6)
+voronoi(12, 0.8).invert().out(o7)`;
 
-    const BUFFER_UVS = {
-      o0: [0.0, 0.0, 0.5, 0.5],
-      o1: [0.5, 0.0, 1.0, 0.5],
-      o2: [0.0, 0.5, 0.5, 1.0],
-      o3: [0.5, 0.5, 1.0, 1.0]
+    // Mapeo de cada buffer a su instancia (1 o 2) y coordenadas UV
+    const BUFFER_MAP = {
+      o0: { tex: 1, uv: [0.0, 0.0, 0.5, 0.5] },
+      o1: { tex: 1, uv: [0.5, 0.0, 1.0, 0.5] },
+      o2: { tex: 1, uv: [0.0, 0.5, 0.5, 1.0] },
+      o3: { tex: 1, uv: [0.5, 0.5, 1.0, 1.0] },
+      o4: { tex: 2, uv: [0.0, 0.0, 0.5, 0.5] },
+      o5: { tex: 2, uv: [0.5, 0.0, 1.0, 0.5] },
+      o6: { tex: 2, uv: [0.0, 0.5, 0.5, 1.0] },
+      o7: { tex: 2, uv: [0.5, 0.5, 1.0, 1.0] }
     };
 
     let surfaces = [];
     let calibrating = true;
     let selectedPoint = null;
-    let hydraCanvas;
+    let hydraCanvas1, hydraCanvas2;
+    let hydra1, hydra2;
 
     window.addEventListener("DOMContentLoaded", () => {
-      // 1. Crear e insertar canvas oculto en el body ya existente
-      hydraCanvas = document.createElement("canvas");
-      hydraCanvas.width = 1280;
-      hydraCanvas.height = 720;
-      hydraCanvas.style.display = "none";
-      document.body.appendChild(hydraCanvas);
+      // Canvas oculto 1 (o0 - o3)
+      hydraCanvas1 = document.createElement("canvas");
+      hydraCanvas1.width = 1280;
+      hydraCanvas1.height = 720;
+      hydraCanvas1.style.display = "none";
+      document.body.appendChild(hydraCanvas1);
 
-      // 2. Inicializar Hydra de forma segura
-      const hydra = new Hydra({
-        canvas: hydraCanvas,
+      // Canvas oculto 2 (o4 - o7)
+      hydraCanvas2 = document.createElement("canvas");
+      hydraCanvas2.width = 1280;
+      hydraCanvas2.height = 720;
+      hydraCanvas2.style.display = "none";
+      document.body.appendChild(hydraCanvas2);
+
+      // Instancia 1 en modo global
+      hydra1 = new Hydra({
+        canvas: hydraCanvas1,
         detectAudio: false,
         makeGlobal: true
       });
 
-      // 3. Registrar métodos en window
-      const synthInstance = hydra.synth || hydra;
-      Object.getOwnPropertyNames(synthInstance).forEach((key) => {
-        if (typeof synthInstance[key] === "function") {
-          window[key] = synthInstance[key].bind(synthInstance);
-        } else {
-          window[key] = synthInstance[key];
-        }
+      // Instancia 2 aislada para aportar o4 - o7
+      hydra2 = new Hydra({
+        canvas: hydraCanvas2,
+        detectAudio: false,
+        makeGlobal: false
       });
-      const proto = Object.getPrototypeOf(synthInstance);
-      if (proto) {
-        Object.getOwnPropertyNames(proto).forEach((key) => {
-          if (key !== "constructor" && typeof synthInstance[key] === "function") {
-            window[key] = synthInstance[key].bind(synthInstance);
+
+      // Exportar funciones de Hydra 1 a window
+      const synth1 = hydra1.synth || hydra1;
+      Object.getOwnPropertyNames(synth1).forEach((key) => {
+        window[key] = typeof synth1[key] === "function" ? synth1[key].bind(synth1) : synth1[key];
+      });
+      const proto1 = Object.getPrototypeOf(synth1);
+      if (proto1) {
+        Object.getOwnPropertyNames(proto1).forEach((key) => {
+          if (key !== "constructor" && typeof synth1[key] === "function") {
+            window[key] = synth1[key].bind(synth1);
           }
         });
       }
+
+      // Asignar o4, o5, o6, o7 apuntando a la segunda instancia
+      const synth2 = hydra2.synth || hydra2;
+      window.o4 = synth2.o0;
+      window.o5 = synth2.o1;
+      window.o6 = synth2.o2;
+      window.o7 = synth2.o3;
 
       window.loadScript = (url) => {
         return new Promise((resolve, reject) => {
@@ -202,13 +222,14 @@ render()`;
         });
       };
 
-      // 4. Iniciar p5.js
+      // Iniciar p5.js
       new p5((p) => {
-        let hydraGraphics;
+        let gfx1, gfx2;
 
         p.setup = () => {
           p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
-          hydraGraphics = p.createGraphics(1280, 720);
+          gfx1 = p.createGraphics(1280, 720);
+          gfx2 = p.createGraphics(1280, 720);
           p.textureMode(p.NORMAL);
           loadState();
           runHydraCode();
@@ -218,13 +239,15 @@ render()`;
           p.background(0);
           p.translate(-p.width / 2, -p.height / 2);
 
-          hydraGraphics.drawingContext.drawImage(hydraCanvas, 0, 0, 1280, 720);
+          gfx1.drawingContext.drawImage(hydraCanvas1, 0, 0, 1280, 720);
+          gfx2.drawingContext.drawImage(hydraCanvas2, 0, 0, 1280, 720);
 
           surfaces.forEach((s) => {
-            const uv = BUFFER_UVS[s.buffer];
+            const info = BUFFER_MAP[s.buffer] || BUFFER_MAP.o0;
+            const uv = info.uv;
 
             p.noStroke();
-            p.texture(hydraGraphics);
+            p.texture(info.tex === 1 ? gfx1 : gfx2);
             p.beginShape();
             p.vertex(s.pts[0].x, s.pts[0].y, uv[0], uv[1]);
             p.vertex(s.pts[1].x, s.pts[1].y, uv[2], uv[1]);
@@ -283,9 +306,12 @@ render()`;
 
     async function runHydraCode() {
       const code = document.getElementById("hydra-code").value;
-      localStorage.setItem("my_hydra_code_v4", code);
+      localStorage.setItem("my_hydra_code_8buf", code);
       try {
         await eval(`(async () => { ${code} })()`);
+        // Forzar renderizado en cuadrícula 2x2 en ambas instancias
+        if (hydra1 && hydra1.synth) hydra1.synth.render();
+        if (hydra2 && hydra2.synth) hydra2.synth.render();
         updateStatus("● Código ejecutado", "#00ff88");
       } catch (err) {
         console.error("Detalle del error Hydra:", err);
@@ -300,10 +326,10 @@ render()`;
     }
 
     function loadState() {
-      const savedCode = localStorage.getItem("my_hydra_code_v4");
+      const savedCode = localStorage.getItem("my_hydra_code_8buf");
       document.getElementById("hydra-code").value = savedCode || DEFAULT_CODE;
 
-      const savedSurfaces = localStorage.getItem("my_hydra_surfaces");
+      const savedSurfaces = localStorage.getItem("my_hydra_surfaces_8buf");
       if (savedSurfaces) {
         surfaces = JSON.parse(savedSurfaces);
       } else {
@@ -315,7 +341,7 @@ render()`;
           },
           {
             id: Date.now() + 1,
-            buffer: "o1",
+            buffer: "o4",
             pts: [{x: 800, y: 150}, {x: 1100, y: 100}, {x: 1100, y: 450}, {x: 800, y: 400}]
           }
         ];
@@ -324,12 +350,12 @@ render()`;
     }
 
     function saveSurfaces() {
-      localStorage.setItem("my_hydra_surfaces", JSON.stringify(surfaces));
+      localStorage.setItem("my_hydra_surfaces_8buf", JSON.stringify(surfaces));
     }
 
     function addSurface() {
-      const buffers = ["o0", "o1", "o2", "o3"];
-      const nextBuffer = buffers[surfaces.length % 4];
+      const buffers = ["o0", "o1", "o2", "o3", "o4", "o5", "o6", "o7"];
+      const nextBuffer = buffers[surfaces.length % 8];
       const offset = (surfaces.length * 30) % 200;
 
       surfaces.push({
@@ -363,17 +389,20 @@ render()`;
     function renderSurfaceUI() {
       const container = document.getElementById("surfaces-list");
       container.innerHTML = "";
+      const allBuffers = ["o0", "o1", "o2", "o3", "o4", "o5", "o6", "o7"];
+      
       surfaces.forEach((s, index) => {
         const div = document.createElement("div");
         div.className = "surface-item";
+        const optionsHtml = allBuffers.map(b => 
+          `<option value="${b}" ${s.buffer === b ? 'selected' : ''}>Buffer ${b}</option>`
+        ).join("");
+
         div.innerHTML = `
           <span>Cara #${index + 1}</span>
           <div>
             <select onchange="changeSurfaceBuffer(${s.id}, this.value)">
-              <option value="o0" ${s.buffer === 'o0' ? 'selected' : ''}>Buffer o0</option>
-              <option value="o1" ${s.buffer === 'o1' ? 'selected' : ''}>Buffer o1</option>
-              <option value="o2" ${s.buffer === 'o2' ? 'selected' : ''}>Buffer o2</option>
-              <option value="o3" ${s.buffer === 'o3' ? 'selected' : ''}>Buffer o3</option>
+              ${optionsHtml}
             </select>
             <button class="danger" onclick="removeSurface(${s.id})" style="padding:2px 6px; margin-left:4px;">✕</button>
           </div>
@@ -389,8 +418,8 @@ render()`;
 
     function resetAll() {
       if (confirm("¿Restaurar código y posiciones iniciales?")) {
-        localStorage.removeItem("my_hydra_code_v4");
-        localStorage.removeItem("my_hydra_surfaces");
+        localStorage.removeItem("my_hydra_code_8buf");
+        localStorage.removeItem("my_hydra_surfaces_8buf");
         location.reload();
       }
     }
