@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Mi Estudio Hydra Mapping (8 Buffers)</title>
+  <title>Mi Estudio Hydra Mapping (Polígonos Libres)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body, html {
@@ -17,7 +17,7 @@
       position: fixed;
       top: 15px;
       left: 15px;
-      width: 380px;
+      width: 400px;
       background: rgba(15, 15, 20, 0.88);
       backdrop-filter: blur(8px);
       border: 1px solid #333;
@@ -39,7 +39,7 @@
 
     textarea#hydra-code {
       width: 100%;
-      height: 180px;
+      height: 170px;
       background: #0a0a0d;
       color: #00ff88;
       border: 1px solid #2a2a35;
@@ -55,7 +55,7 @@
     .toolbar {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 5px;
       margin-top: 8px;
     }
 
@@ -63,9 +63,9 @@
       background: #1f1f29;
       color: #fff;
       border: 1px solid #3d3d4d;
-      padding: 6px 10px;
+      padding: 5px 8px;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 11px;
       cursor: pointer;
     }
 
@@ -90,11 +90,11 @@
       padding: 5px 8px;
       margin-bottom: 5px;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 11px;
     }
 
     .shortcuts {
-      margin-top: 10px;
+      margin-top: 8px;
       font-size: 11px;
       color: #888;
       line-height: 1.5;
@@ -108,15 +108,18 @@
 
   <div id="ui-panel">
     <div id="ui-header">
-      <span>HYDRA MAPPING (o0 - o7)</span>
+      <span>HYDRA MAPPING STUDIO (N-GON)</span>
       <span id="status-badge" style="color:#00ff88; font-size:11px;">● Iniciando...</span>
     </div>
 
     <textarea id="hydra-code" spellcheck="false"></textarea>
 
     <div class="toolbar">
-      <button class="primary" onclick="runHydraCode()">▶ Ejecutar (Ctrl+Enter)</button>
-      <button onclick="addSurface()">+ Superficie</button>
+      <button class="primary" onclick="runHydraCode()">▶ Ejecutar</button>
+      <button onclick="addPolygon(3)">+ Triángulo</button>
+      <button onclick="addPolygon(4)">+ Cuadrado</button>
+      <button onclick="addPolygon(5)">+ Pentágono</button>
+      <button onclick="addPolygon(6)">+ Hexágono</button>
       <button onclick="toggleCalibration()" id="btn-calib">Calibrar: ON</button>
       <button onclick="resetAll()" class="danger">Reset</button>
     </div>
@@ -124,7 +127,7 @@
     <div id="surfaces-list"></div>
 
     <div class="shortcuts">
-      <b>Atajos:</b> [<b>C</b>] Calibrar | [<b>H</b>] Ocultar Panel | [<b>F11</b>] Pantalla Completa
+      <b>Controles:</b> Arrastra puntos para deformar | <b>[+V]</b> Añade esquina | <b>[-V]</b> Quita esquina | <b>[C]</b> Calibrar | <b>[H]</b> Ocultar Panel
     </div>
   </div>
 
@@ -144,7 +147,6 @@ osc(30, 0.05).thresh(0.5).out(o5)
 noise(8).color(0.2, 1, 0.4).out(o6)
 voronoi(12, 0.8).invert().out(o7)`;
 
-    // Mapeo de cada buffer a su instancia (1 o 2) y coordenadas UV
     const BUFFER_MAP = {
       o0: { tex: 1, uv: [0.0, 0.0, 0.5, 0.5] },
       o1: { tex: 1, uv: [0.5, 0.0, 1.0, 0.5] },
@@ -162,36 +164,27 @@ voronoi(12, 0.8).invert().out(o7)`;
     let hydraCanvas1, hydraCanvas2;
     let hydra1, hydra2;
 
+    // Inicializar objeto mouse global para que Hydra responda al cursor sobre toda la pantalla
+    window.mouse = { x: 0, y: 0 };
+    window.addEventListener("mousemove", (e) => {
+      window.mouse.x = e.clientX;
+      window.mouse.y = e.clientY;
+    });
+
     window.addEventListener("DOMContentLoaded", () => {
-      // Canvas oculto 1 (o0 - o3)
       hydraCanvas1 = document.createElement("canvas");
-      hydraCanvas1.width = 1280;
-      hydraCanvas1.height = 720;
+      hydraCanvas1.width = 1280; hydraCanvas1.height = 720;
       hydraCanvas1.style.display = "none";
       document.body.appendChild(hydraCanvas1);
 
-      // Canvas oculto 2 (o4 - o7)
       hydraCanvas2 = document.createElement("canvas");
-      hydraCanvas2.width = 1280;
-      hydraCanvas2.height = 720;
+      hydraCanvas2.width = 1280; hydraCanvas2.height = 720;
       hydraCanvas2.style.display = "none";
       document.body.appendChild(hydraCanvas2);
 
-      // Instancia 1 en modo global
-      hydra1 = new Hydra({
-        canvas: hydraCanvas1,
-        detectAudio: false,
-        makeGlobal: true
-      });
+      hydra1 = new Hydra({ canvas: hydraCanvas1, detectAudio: false, makeGlobal: true });
+      hydra2 = new Hydra({ canvas: hydraCanvas2, detectAudio: false, makeGlobal: false });
 
-      // Instancia 2 aislada para aportar o4 - o7
-      hydra2 = new Hydra({
-        canvas: hydraCanvas2,
-        detectAudio: false,
-        makeGlobal: false
-      });
-
-      // Exportar funciones de Hydra 1 a window
       const synth1 = hydra1.synth || hydra1;
       Object.getOwnPropertyNames(synth1).forEach((key) => {
         window[key] = typeof synth1[key] === "function" ? synth1[key].bind(synth1) : synth1[key];
@@ -205,7 +198,6 @@ voronoi(12, 0.8).invert().out(o7)`;
         });
       }
 
-      // Asignar o4, o5, o6, o7 apuntando a la segunda instancia
       const synth2 = hydra2.synth || hydra2;
       window.o4 = synth2.o0;
       window.o5 = synth2.o1;
@@ -222,7 +214,6 @@ voronoi(12, 0.8).invert().out(o7)`;
         });
       };
 
-      // Iniciar p5.js
       new p5((p) => {
         let gfx1, gfx2;
 
@@ -243,18 +234,35 @@ voronoi(12, 0.8).invert().out(o7)`;
           gfx2.drawingContext.drawImage(hydraCanvas2, 0, 0, 1280, 720);
 
           surfaces.forEach((s) => {
+            if (s.pts.length < 3) return;
             const info = BUFFER_MAP[s.buffer] || BUFFER_MAP.o0;
             const uv = info.uv;
+
+            // Calcular caja envolvente (Bounding Box) del polígono para mapear UV de N vértices
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            s.pts.forEach(pt => {
+              if (pt.x < minX) minX = pt.x;
+              if (pt.x > maxX) maxX = pt.x;
+              if (pt.y < minY) minY = pt.y;
+              if (pt.y > maxY) maxY = pt.y;
+            });
+            const spanX = (maxX - minX) || 1;
+            const spanY = (maxY - minY) || 1;
 
             p.noStroke();
             p.texture(info.tex === 1 ? gfx1 : gfx2);
             p.beginShape();
-            p.vertex(s.pts[0].x, s.pts[0].y, uv[0], uv[1]);
-            p.vertex(s.pts[1].x, s.pts[1].y, uv[2], uv[1]);
-            p.vertex(s.pts[2].x, s.pts[2].y, uv[2], uv[3]);
-            p.vertex(s.pts[3].x, s.pts[3].y, uv[0], uv[3]);
+            s.pts.forEach(pt => {
+              // Normalizar la posición del vértice dentro de la textura del buffer
+              const normX = (pt.x - minX) / spanX;
+              const normY = (pt.y - minY) / spanY;
+              const u = uv[0] + normX * (uv[2] - uv[0]);
+              const v = uv[1] + normY * (uv[3] - uv[1]);
+              p.vertex(pt.x, pt.y, u, v);
+            });
             p.endShape(p.CLOSE);
 
+            // Guías de calibración
             if (calibrating) {
               p.noFill();
               p.stroke(0, 255, 204);
@@ -266,15 +274,13 @@ voronoi(12, 0.8).invert().out(o7)`;
               s.pts.forEach((pt, pIdx) => {
                 p.fill(pIdx === 0 ? "#ff0066" : "#00ffcc");
                 p.noStroke();
-                p.ellipse(pt.x, pt.y, 14, 14);
+                p.ellipse(pt.x, pt.y, 13, 13);
               });
             }
           });
         };
 
-        p.windowResized = () => {
-          p.resizeCanvas(p.windowWidth, p.windowHeight);
-        };
+        p.windowResized = () => p.resizeCanvas(p.windowWidth, p.windowHeight);
 
         p.mousePressed = () => {
           if (!calibrating) return;
@@ -306,10 +312,9 @@ voronoi(12, 0.8).invert().out(o7)`;
 
     async function runHydraCode() {
       const code = document.getElementById("hydra-code").value;
-      localStorage.setItem("my_hydra_code_8buf", code);
+      localStorage.setItem("my_hydra_code_ngon", code);
       try {
         await eval(`(async () => { ${code} })()`);
-        // Forzar renderizado en cuadrícula 2x2 en ambas instancias
         if (hydra1 && hydra1.synth) hydra1.synth.render();
         if (hydra2 && hydra2.synth) hydra2.synth.render();
         updateStatus("● Código ejecutado", "#00ff88");
@@ -325,51 +330,74 @@ voronoi(12, 0.8).invert().out(o7)`;
       badge.style.color = color;
     }
 
+    // Genera un polígono regular de N lados
+    function createRegularPolygon(sides, centerX, centerY, radius) {
+      const pts = [];
+      for (let i = 0; i < sides; i++) {
+        const angle = (Math.PI * 2 * i) / sides - Math.PI / 2;
+        pts.push({
+          x: Math.round(centerX + Math.cos(angle) * radius),
+          y: Math.round(centerY + Math.sin(angle) * radius)
+        });
+      }
+      return pts;
+    }
+
+    function addPolygon(sides) {
+      const buffers = ["o0", "o1", "o2", "o3", "o4", "o5", "o6", "o7"];
+      const nextBuffer = buffers[surfaces.length % 8];
+      const offset = (surfaces.length * 35) % 250;
+
+      surfaces.push({
+        id: Date.now(),
+        buffer: nextBuffer,
+        pts: createRegularPolygon(sides, 650 + offset, 350 + offset, 130)
+      });
+      saveSurfaces();
+      renderSurfaceUI();
+    }
+
+    // Añade una esquina nueva en el punto medio del último lado
+    function addVertexToSurface(id) {
+      const s = surfaces.find(item => item.id === id);
+      if (!s) return;
+      const last = s.pts[s.pts.length - 1];
+      const first = s.pts[0];
+      s.pts.push({
+        x: Math.round((last.x + first.x) / 2) + 15,
+        y: Math.round((last.y + first.y) / 2) + 15
+      });
+      saveSurfaces();
+      renderSurfaceUI();
+    }
+
+    // Quita la última esquina (mínimo 3 para que siga siendo un polígono)
+    function removeVertexFromSurface(id) {
+      const s = surfaces.find(item => item.id === id);
+      if (!s || s.pts.length <= 3) return;
+      s.pts.pop();
+      saveSurfaces();
+      renderSurfaceUI();
+    }
+
     function loadState() {
-      const savedCode = localStorage.getItem("my_hydra_code_8buf");
+      const savedCode = localStorage.getItem("my_hydra_code_ngon");
       document.getElementById("hydra-code").value = savedCode || DEFAULT_CODE;
 
-      const savedSurfaces = localStorage.getItem("my_hydra_surfaces_8buf");
+      const savedSurfaces = localStorage.getItem("my_hydra_surfaces_ngon");
       if (savedSurfaces) {
         surfaces = JSON.parse(savedSurfaces);
       } else {
         surfaces = [
-          {
-            id: Date.now(),
-            buffer: "o0",
-            pts: [{x: 450, y: 120}, {x: 750, y: 120}, {x: 750, y: 420}, {x: 450, y: 420}]
-          },
-          {
-            id: Date.now() + 1,
-            buffer: "o4",
-            pts: [{x: 800, y: 150}, {x: 1100, y: 100}, {x: 1100, y: 450}, {x: 800, y: 400}]
-          }
+          { id: Date.now(), buffer: "o0", pts: createRegularPolygon(3, 550, 300, 140) },
+          { id: Date.now() + 1, buffer: "o1", pts: createRegularPolygon(6, 900, 300, 140) }
         ];
       }
       renderSurfaceUI();
     }
 
     function saveSurfaces() {
-      localStorage.setItem("my_hydra_surfaces_8buf", JSON.stringify(surfaces));
-    }
-
-    function addSurface() {
-      const buffers = ["o0", "o1", "o2", "o3", "o4", "o5", "o6", "o7"];
-      const nextBuffer = buffers[surfaces.length % 8];
-      const offset = (surfaces.length * 30) % 200;
-
-      surfaces.push({
-        id: Date.now(),
-        buffer: nextBuffer,
-        pts: [
-          {x: 500 + offset, y: 200 + offset},
-          {x: 750 + offset, y: 200 + offset},
-          {x: 750 + offset, y: 450 + offset},
-          {x: 500 + offset, y: 450 + offset}
-        ]
-      });
-      saveSurfaces();
-      renderSurfaceUI();
+      localStorage.setItem("my_hydra_surfaces_ngon", JSON.stringify(surfaces));
     }
 
     function removeSurface(id) {
@@ -395,16 +423,18 @@ voronoi(12, 0.8).invert().out(o7)`;
         const div = document.createElement("div");
         div.className = "surface-item";
         const optionsHtml = allBuffers.map(b => 
-          `<option value="${b}" ${s.buffer === b ? 'selected' : ''}>Buffer ${b}</option>`
+          `<option value="${b}" ${s.buffer === b ? 'selected' : ''}>${b}</option>`
         ).join("");
 
         div.innerHTML = `
-          <span>Cara #${index + 1}</span>
+          <span>#${index + 1} (${s.pts.length} esq.)</span>
           <div>
+            <button onclick="addVertexToSurface(${s.id})" title="Añadir esquina">+V</button>
+            <button onclick="removeVertexFromSurface(${s.id})" title="Quitar esquina">-V</button>
             <select onchange="changeSurfaceBuffer(${s.id}, this.value)">
               ${optionsHtml}
             </select>
-            <button class="danger" onclick="removeSurface(${s.id})" style="padding:2px 6px; margin-left:4px;">✕</button>
+            <button class="danger" onclick="removeSurface(${s.id})" style="padding:3px 6px;">✕</button>
           </div>
         `;
         container.appendChild(div);
@@ -417,9 +447,9 @@ voronoi(12, 0.8).invert().out(o7)`;
     }
 
     function resetAll() {
-      if (confirm("¿Restaurar código y posiciones iniciales?")) {
-        localStorage.removeItem("my_hydra_code_8buf");
-        localStorage.removeItem("my_hydra_surfaces_8buf");
+      if (confirm("¿Restaurar código y figuras iniciales?")) {
+        localStorage.removeItem("my_hydra_code_ngon");
+        localStorage.removeItem("my_hydra_surfaces_ngon");
         location.reload();
       }
     }
