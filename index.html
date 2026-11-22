@@ -13,7 +13,6 @@
       color: #eee;
     }
 
-    /* Panel flotante del editor y controles */
     #ui-panel {
       position: fixed;
       top: 15px;
@@ -127,7 +126,6 @@
       <button onclick="resetAll()" class="danger">Reset</button>
     </div>
 
-    <!-- Lista de superficies activas -->
     <div id="surfaces-list"></div>
 
     <div class="shortcuts">
@@ -154,22 +152,19 @@ shape(4, 0.5, 0.01).repeat(3, 3).rotate(() => time * 0.5).out(o3)
 // Renderiza los 4 buffers en cuadrícula interna para mapearlos
 render()`;
 
-    // Mapeo UV correspondiente a la cuadrícula 2x2 de render() en Hydra
     const BUFFER_UVS = {
-      o0: [0.0, 0.0, 0.5, 0.5], // Arriba Izquierda
-      o1: [0.5, 0.0, 1.0, 0.5], // Arriba Derecha
-      o2: [0.0, 0.5, 0.5, 1.0], // Abajo Izquierda
-      o3: [0.5, 0.5, 1.0, 1.0]  // Abajo Derecha
+      o0: [0.0, 0.0, 0.5, 0.5],
+      o1: [0.5, 0.0, 1.0, 0.5],
+      o2: [0.0, 0.5, 0.5, 1.0],
+      o3: [0.5, 0.5, 1.0, 1.0]
     };
 
     let surfaces = [];
     let calibrating = true;
     let selectedPoint = null;
-    let selectedSurface = null;
-    let dragOffset = { x: 0, y: 0 };
 
     // ==========================================
-    // 2. MOTOR HYDRA
+    // 2. MOTOR HYDRA (Único dueño del entorno global)
     // ==========================================
     const hydraCanvas = document.createElement("canvas");
     hydraCanvas.width = 1280;
@@ -177,11 +172,21 @@ render()`;
 
     const hydra = new Hydra({
       canvas: hydraCanvas,
-      detectAudio: true, // Permite usar a.fft[] con el micrófono
+      detectAudio: true,
       makeGlobal: true
     });
 
-   async function runHydraCode() {
+    window.loadScript = (url) => {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = url;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    };
+
+    async function runHydraCode() {
       const code = document.getElementById("hydra-code").value;
       localStorage.setItem("my_hydra_code", code);
       try {
@@ -210,7 +215,6 @@ render()`;
       if (savedSurfaces) {
         surfaces = JSON.parse(savedSurfaces);
       } else {
-        // Crear 2 superficies por defecto
         surfaces = [
           {
             id: Date.now(),
@@ -300,93 +304,88 @@ render()`;
     }
 
     // ==========================================
-    // 4. MOTOR P5.JS (WEBGL MAPPING)
+    // 4. MOTOR P5.JS EN MODO INSTANCIA
     // ==========================================
-    let hydraGraphics;
+    new p5((p) => {
+      let hydraGraphics;
 
-    function setup() {
-      createCanvas(windowWidth, windowHeight, WEBGL);
-      hydraGraphics = createGraphics(1280, 720);
-      textureMode(NORMAL);
-      loadState();
-      runHydraCode();
-    }
+      p.setup = () => {
+        p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
+        hydraGraphics = p.createGraphics(1280, 720);
+        p.textureMode(p.NORMAL);
+        loadState();
+        runHydraCode();
+      };
 
-    function draw() {
-      background(0);
-      // Mover origen del centro de la pantalla a la esquina superior izquierda
-      translate(-width / 2, -height / 2);
+      p.draw = () => {
+        p.background(0);
+        p.translate(-p.width / 2, -p.height / 2);
 
-      // Volcar el frame actual de Hydra a la textura de p5
-      hydraGraphics.drawingContext.drawImage(hydraCanvas, 0, 0, 1280, 720);
+        hydraGraphics.drawingContext.drawImage(hydraCanvas, 0, 0, 1280, 720);
 
-      surfaces.forEach((s, idx) => {
-        const uv = BUFFER_UVS[s.buffer];
+        surfaces.forEach((s) => {
+          const uv = BUFFER_UVS[s.buffer];
 
-        // Dibujar el polígono texturizado
-        noStroke();
-        texture(hydraGraphics);
-        beginShape();
-        vertex(s.pts[0].x, s.pts[0].y, uv[0], uv[1]);
-        vertex(s.pts[1].x, s.pts[1].y, uv[2], uv[1]);
-        vertex(s.pts[2].x, s.pts[2].y, uv[2], uv[3]);
-        vertex(s.pts[3].x, s.pts[3].y, uv[0], uv[3]);
-        endShape(CLOSE);
+          p.noStroke();
+          p.texture(hydraGraphics);
+          p.beginShape();
+          p.vertex(s.pts[0].x, s.pts[0].y, uv[0], uv[1]);
+          p.vertex(s.pts[1].x, s.pts[1].y, uv[2], uv[1]);
+          p.vertex(s.pts[2].x, s.pts[2].y, uv[2], uv[3]);
+          p.vertex(s.pts[3].x, s.pts[3].y, uv[0], uv[3]);
+          p.endShape(p.CLOSE);
 
-        // Guías visuales si está activo el modo calibración
-        if (calibrating) {
-          noFill();
-          stroke(0, 255, 204);
-          strokeWeight(1.5);
-          beginShape();
-          s.pts.forEach(p => vertex(p.x, p.y));
-          endShape(CLOSE);
+          if (calibrating) {
+            p.noFill();
+            p.stroke(0, 255, 204);
+            p.strokeWeight(1.5);
+            p.beginShape();
+            s.pts.forEach(pt => p.vertex(pt.x, pt.y));
+            p.endShape(p.CLOSE);
 
-          // Dibujar los 4 nodos arrastrables
-          s.pts.forEach((p, pIdx) => {
-            fill(pIdx === 0 ? "#ff0066" : "#00ffcc");
-            noStroke();
-            ellipse(p.x, p.y, 14, 14);
-          });
-        }
-      });
-    }
+            s.pts.forEach((pt, pIdx) => {
+              p.fill(pIdx === 0 ? "#ff0066" : "#00ffcc");
+              p.noStroke();
+              p.ellipse(pt.x, pt.y, 14, 14);
+            });
+          }
+        });
+      };
 
-    function windowResized() {
-      resizeCanvas(windowWidth, windowHeight);
-    }
+      p.windowResized = () => {
+        p.resizeCanvas(p.windowWidth, p.windowHeight);
+      };
 
-    // ==========================================
-    // 5. INTERACCIÓN DE MOUSE Y TECLADO
-    // ==========================================
-    function mousePressed() {
-      if (!calibrating) return;
-      // Verificar si se hizo clic cerca de un vértice
-      for (let s of surfaces) {
-        for (let p of s.pts) {
-          if (dist(mouseX, mouseY, p.x, p.y) < 15) {
-            selectedPoint = p;
-            return;
+      p.mousePressed = () => {
+        if (!calibrating) return;
+        for (let s of surfaces) {
+          for (let pt of s.pts) {
+            if (p.dist(p.mouseX, p.mouseY, pt.x, pt.y) < 15) {
+              selectedPoint = pt;
+              return;
+            }
           }
         }
-      }
-    }
+      };
 
-    function mouseDragged() {
-      if (selectedPoint) {
-        selectedPoint.x = mouseX;
-        selectedPoint.y = mouseY;
-      }
-    }
+      p.mouseDragged = () => {
+        if (selectedPoint) {
+          selectedPoint.x = p.mouseX;
+          selectedPoint.y = p.mouseY;
+        }
+      };
 
-    function mouseReleased() {
-      if (selectedPoint) {
-        selectedPoint = null;
-        saveSurfaces(); // Guardar nueva posición automáticamente
-      }
-    }
+      p.mouseReleased = () => {
+        if (selectedPoint) {
+          selectedPoint = null;
+          saveSurfaces();
+        }
+      };
+    });
 
-    // Atajos en el editor de texto
+    // ==========================================
+    // 5. ATAJOS DE TECLADO
+    // ==========================================
     document.getElementById("hydra-code").addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.key === "Enter") {
         e.preventDefault();
@@ -394,7 +393,6 @@ render()`;
       }
     });
 
-    // Atajos globales (fuera del textarea)
     window.addEventListener("keydown", (e) => {
       if (document.activeElement.tagName === "TEXTAREA") return;
       if (e.key.toLowerCase() === "c") toggleCalibration();
