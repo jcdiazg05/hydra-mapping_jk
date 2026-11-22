@@ -135,11 +135,140 @@
   <script src="https://unpkg.com/hydra-synth@1.3.29/dist/hydra-synth.js"></script>
 
   <script>
-    // PEGA AQUÍ EL CONTENIDO DE my_hydra_code_ngon (entre comillas invertidas)
-    const DEFAULT_CODE = `PEGA_AQUI_EL_VALOR_DE_my_hydra_code_ngon`;
+    const DEFAULT_CODE = `s0.initImage("b8ced262-375a-437b-97a1-13f5ba0d1c6c.png")
+src(s0)
+.out(o0)
 
-    // PEGA AQUÍ EL CONTENIDO JSON DE my_hydra_surfaces_ngon (entre comillas invertidas)
-    const DEFAULT_SURFACES_JSON = `PEGA_AQUI_EL_VALOR_DE_my_hydra_surfaces_ngon`;
+speed = 0.6
+noise(11)
+.rotate(12, 0.9)
+//.kaleid(7)
+.invert(2)
+.repeat(5,3)
+.brightness(0.5)
+//.posterize(-10,0.4)
+.scrollY(7,0.1)
+.scrollX(3,0.1)
+.colorama(2.9)
+.kaleid(2)
+.saturate(1.7)
+//.pixelate(1000,500)
+.hue(8)
+.scroll(12,12,0.1,0.1)
+.kaleid(8)
+.rotate( () => time%360)
+.color(0,0.8,0.4)
+.out(o1)
+
+voronoi(10,3,1)
+.colorama([0.9,0.5,0.7])
+.kaleid([4,4,10])
+.modulate(osc(5),3)
+.scrollY(3,0.3).scrollX(2,0.2)
+.kaleid(4)
+.rotate(()=> time%360)
+.hue(() => Math.sin(time))
+.out(o2)
+
+gradient(1)
+.kaleid(1)
+.modulatePixelate(noise(10,1),)
+.out(o3)
+
+shape([3,5,7],()=>a.fft[0])
+.color(()=>a.fft[2],()=>a.fft[3],()=>a.fft[1])
+.modulate(noise(()=>a.fft[1]))
+.diff(o4)
+.modulateHue(src(o4).scale(1.01),10)
+.kaleid([2,3,1,2],()=>a.fft[0])
+.out(o4)
+
+gradient()
+.modulateHue(src(o0).scale(1),1)
+.repeat(
+  () => 10 * Math.tan(time * 0.2),
+  () => 2 * Math.sqrt(4)
+)
+.kaleid(
+  () => Math.round()
+)
+.kaleid(
+  () => Math.exp(2))
+.colorama(
+  () => Math.floor(time * 2))
+.modulate(osc(70,0.2))
+.modulateHue(src(o5).scale(1),1)
+.out(o5)`;
+
+    const DEFAULT_SURFACES = [
+      {
+        id: 1795383500289,
+        buffer: "o2",
+        pts: [
+          { x: 907, y: 327 },
+          { x: 908, y: 409 },
+          { x: 986, y: 709 },
+          { x: 529, y: 708 },
+          { x: 667, y: 500 }
+        ]
+      },
+      {
+        id: 1795383561203,
+        buffer: "o1",
+        pts: [
+          { x: 355, y: 377 },
+          { x: 599, y: 370 },
+          { x: 606, y: 413 },
+          { x: 669, y: 500 },
+          { x: 529, y: 707 }
+        ]
+      },
+      {
+        id: 1795383614321,
+        buffer: "o6",
+        pts: [
+          { x: 530, y: 81 },
+          { x: 663, y: 267 },
+          { x: 600, y: 333 },
+          { x: 599, y: 371 },
+          { x: 354, y: 378 },
+          { x: 44, y: 116 }
+        ]
+      },
+      {
+        id: 1795383706355,
+        buffer: "o3",
+        pts: [
+          { x: 962, y: 84 },
+          { x: 1466, y: 117 },
+          { x: 1201, y: 382 },
+          { x: 908, y: 365 },
+          { x: 905, y: 325 }
+        ]
+      },
+      {
+        id: 1795383742234,
+        buffer: "o4",
+        pts: [
+          { x: 908, y: 365 },
+          { x: 1202, y: 382 },
+          { x: 1477, y: 596 },
+          { x: 986, y: 711 },
+          { x: 853, y: 499 }
+        ]
+      },
+      {
+        id: 1795384803320,
+        buffer: "o0",
+        pts: [
+          { x: 962, y: 370 },
+          { x: 878, y: 537 },
+          { x: 648, y: 533 },
+          { x: 556, y: 372 },
+          { x: 648, y: 243 }
+        ]
+      }
+    ];
 
     const BUFFER_MAP = {
       o0: { tex: 1, uv: [0.0, 0.0, 0.5, 0.5] },
@@ -367,53 +496,23 @@
       renderSurfaceUI();
     }
 
-    function getFallbackSurfaces() {
-      if (DEFAULT_SURFACES_JSON && !DEFAULT_SURFACES_JSON.startsWith("PEGA_AQUI_")) {
-        try {
-          const parsed = JSON.parse(DEFAULT_SURFACES_JSON);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
-          }
-        } catch (err) {
-          console.error("Error al leer DEFAULT_SURFACES_JSON:", err);
-        }
-      }
-      return [
-        { id: Date.now(), buffer: "o0", pts: createRegularPolygon(3, 550, 300, 140) },
-        { id: Date.now() + 1, buffer: "o1", pts: createRegularPolygon(6, 900, 300, 140) }
-      ];
-    }
-
-    function getFallbackCode() {
-      if (DEFAULT_CODE && !DEFAULT_CODE.startsWith("PEGA_AQUI_")) {
-        return DEFAULT_CODE;
-      }
-      return `// Banco 1 (o0 - o3)
-osc(15, 0.1, 0.8).rotate(0.4).kaleid(4).out(o0)
-voronoi(6, 0.3, 0.5).color(0.1, 0.7, 1).out(o1)
-noise(3, 0.2).posterize(4).color(1, 0.2, 0.5).out(o2)
-gradient(1).rotate(() => time * 0.5).out(o3)
-
-// Banco 2 (o4 - o7)
-shape(4, 0.5, 0.01).repeat(3, 3).out(o4)
-osc(30, 0.05).thresh(0.5).out(o5)
-noise(8).color(0.2, 1, 0.4).out(o6)
-voronoi(12, 0.8).invert().out(o7)`;
+    function cloneSurfaces(data) {
+      return JSON.parse(JSON.stringify(data));
     }
 
     function loadState() {
       const savedCode = localStorage.getItem("my_hydra_code_ngon");
-      document.getElementById("hydra-code").value = savedCode || getFallbackCode();
+      document.getElementById("hydra-code").value = savedCode || DEFAULT_CODE;
 
       const savedSurfaces = localStorage.getItem("my_hydra_surfaces_ngon");
       if (savedSurfaces) {
         try {
           surfaces = JSON.parse(savedSurfaces);
         } catch (err) {
-          surfaces = getFallbackSurfaces();
+          surfaces = cloneSurfaces(DEFAULT_SURFACES);
         }
       } else {
-        surfaces = getFallbackSurfaces();
+        surfaces = cloneSurfaces(DEFAULT_SURFACES);
         saveSurfaces();
       }
       renderSurfaceUI();
