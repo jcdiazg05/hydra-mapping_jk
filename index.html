@@ -104,10 +104,9 @@
     .shortcuts b { color: #ccc; }
   </style>
 
-  <!-- 1. Cargar p5.js primero -->
+  <!-- Cargar p5.js y versión estable completa de hydra-synth -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-  <!-- 2. Cargar Hydra después para que tome el control global -->
-  <script src="https://unpkg.com/hydra-synth"></script>
+  <script src="https://unpkg.com/hydra-synth@1.3.29/dist/hydra-synth.js"></script>
 </head>
 <body>
 
@@ -159,7 +158,7 @@ render()`;
     let calibrating = true;
     let selectedPoint = null;
 
-    // Inicializar Hydra y forzar todas sus funciones en window
+    // Inicializar Hydra v1.3.29 (incluye noise, osc, voronoi, shape, etc. nativos)
     const hydraCanvas = document.createElement("canvas");
     hydraCanvas.width = 1280;
     hydraCanvas.height = 720;
@@ -169,11 +168,6 @@ render()`;
       detectAudio: true,
       makeGlobal: true
     });
-
-    // Asegurar explícitamente que synth y sus funciones (osc, noise, voronoi, etc.) sean globales
-    if (hydra.synth) {
-      Object.assign(window, hydra.synth);
-    }
 
     window.loadScript = (url) => {
       return new Promise((resolve, reject) => {
@@ -187,7 +181,7 @@ render()`;
 
     async function runHydraCode() {
       const code = document.getElementById("hydra-code").value;
-      localStorage.setItem("my_hydra_code", code);
+      localStorage.setItem("my_hydra_code_v2", code);
       try {
         await eval(`(async () => { ${code} })()`);
         updateStatus("● Código ejecutado", "#00ff88");
@@ -204,7 +198,7 @@ render()`;
     }
 
     function loadState() {
-      const savedCode = localStorage.getItem("my_hydra_code");
+      const savedCode = localStorage.getItem("my_hydra_code_v2");
       document.getElementById("hydra-code").value = savedCode || DEFAULT_CODE;
 
       const savedSurfaces = localStorage.getItem("my_hydra_surfaces");
@@ -293,7 +287,7 @@ render()`;
 
     function resetAll() {
       if (confirm("¿Restaurar código y posiciones iniciales?")) {
-        localStorage.removeItem("my_hydra_code");
+        localStorage.removeItem("my_hydra_code_v2");
         localStorage.removeItem("my_hydra_surfaces");
         location.reload();
       }
