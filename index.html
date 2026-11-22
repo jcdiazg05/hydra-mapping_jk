@@ -135,17 +135,11 @@
   <script src="https://unpkg.com/hydra-synth@1.3.29/dist/hydra-synth.js"></script>
 
   <script>
-    const DEFAULT_CODE = `// Banco 1 (o0 - o3)
-osc(15, 0.1, 0.8).rotate(0.4).kaleid(4).out(o0)
-voronoi(6, 0.3, 0.5).color(0.1, 0.7, 1).out(o1)
-noise(3, 0.2).posterize(4).color(1, 0.2, 0.5).out(o2)
-gradient(1).rotate(() => time * 0.5).out(o3)
+    // PEGA AQUÍ EL CONTENIDO DE my_hydra_code_ngon (entre comillas invertidas)
+    const DEFAULT_CODE = `PEGA_AQUI_EL_VALOR_DE_my_hydra_code_ngon`;
 
-// Banco 2 (o4 - o7)
-shape(4, 0.5, 0.01).repeat(3, 3).out(o4)
-osc(30, 0.05).thresh(0.5).out(o5)
-noise(8).color(0.2, 1, 0.4).out(o6)
-voronoi(12, 0.8).invert().out(o7)`;
+    // PEGA AQUÍ EL CONTENIDO JSON DE my_hydra_surfaces_ngon (entre comillas invertidas)
+    const DEFAULT_SURFACES_JSON = `PEGA_AQUI_EL_VALOR_DE_my_hydra_surfaces_ngon`;
 
     const BUFFER_MAP = {
       o0: { tex: 1, uv: [0.0, 0.0, 0.5, 0.5] },
@@ -164,7 +158,6 @@ voronoi(12, 0.8).invert().out(o7)`;
     let hydraCanvas1, hydraCanvas2;
     let hydra1, hydra2;
 
-    // Inicializar objeto mouse global para que Hydra responda al cursor sobre toda la pantalla
     window.mouse = { x: 0, y: 0 };
     window.addEventListener("mousemove", (e) => {
       window.mouse.x = e.clientX;
@@ -238,7 +231,6 @@ voronoi(12, 0.8).invert().out(o7)`;
             const info = BUFFER_MAP[s.buffer] || BUFFER_MAP.o0;
             const uv = info.uv;
 
-            // Calcular caja envolvente (Bounding Box) del polígono para mapear UV de N vértices
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             s.pts.forEach(pt => {
               if (pt.x < minX) minX = pt.x;
@@ -253,7 +245,6 @@ voronoi(12, 0.8).invert().out(o7)`;
             p.texture(info.tex === 1 ? gfx1 : gfx2);
             p.beginShape();
             s.pts.forEach(pt => {
-              // Normalizar la posición del vértice dentro de la textura del buffer
               const normX = (pt.x - minX) / spanX;
               const normY = (pt.y - minY) / spanY;
               const u = uv[0] + normX * (uv[2] - uv[0]);
@@ -262,7 +253,6 @@ voronoi(12, 0.8).invert().out(o7)`;
             });
             p.endShape(p.CLOSE);
 
-            // Guías de calibración
             if (calibrating) {
               p.noFill();
               p.stroke(0, 255, 204);
@@ -330,7 +320,6 @@ voronoi(12, 0.8).invert().out(o7)`;
       badge.style.color = color;
     }
 
-    // Genera un polígono regular de N lados
     function createRegularPolygon(sides, centerX, centerY, radius) {
       const pts = [];
       for (let i = 0; i < sides; i++) {
@@ -357,7 +346,6 @@ voronoi(12, 0.8).invert().out(o7)`;
       renderSurfaceUI();
     }
 
-    // Añade una esquina nueva en el punto medio del último lado
     function addVertexToSurface(id) {
       const s = surfaces.find(item => item.id === id);
       if (!s) return;
@@ -371,7 +359,6 @@ voronoi(12, 0.8).invert().out(o7)`;
       renderSurfaceUI();
     }
 
-    // Quita la última esquina (mínimo 3 para que siga siendo un polígono)
     function removeVertexFromSurface(id) {
       const s = surfaces.find(item => item.id === id);
       if (!s || s.pts.length <= 3) return;
@@ -380,18 +367,54 @@ voronoi(12, 0.8).invert().out(o7)`;
       renderSurfaceUI();
     }
 
+    function getFallbackSurfaces() {
+      if (DEFAULT_SURFACES_JSON && !DEFAULT_SURFACES_JSON.startsWith("PEGA_AQUI_")) {
+        try {
+          const parsed = JSON.parse(DEFAULT_SURFACES_JSON);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        } catch (err) {
+          console.error("Error al leer DEFAULT_SURFACES_JSON:", err);
+        }
+      }
+      return [
+        { id: Date.now(), buffer: "o0", pts: createRegularPolygon(3, 550, 300, 140) },
+        { id: Date.now() + 1, buffer: "o1", pts: createRegularPolygon(6, 900, 300, 140) }
+      ];
+    }
+
+    function getFallbackCode() {
+      if (DEFAULT_CODE && !DEFAULT_CODE.startsWith("PEGA_AQUI_")) {
+        return DEFAULT_CODE;
+      }
+      return `// Banco 1 (o0 - o3)
+osc(15, 0.1, 0.8).rotate(0.4).kaleid(4).out(o0)
+voronoi(6, 0.3, 0.5).color(0.1, 0.7, 1).out(o1)
+noise(3, 0.2).posterize(4).color(1, 0.2, 0.5).out(o2)
+gradient(1).rotate(() => time * 0.5).out(o3)
+
+// Banco 2 (o4 - o7)
+shape(4, 0.5, 0.01).repeat(3, 3).out(o4)
+osc(30, 0.05).thresh(0.5).out(o5)
+noise(8).color(0.2, 1, 0.4).out(o6)
+voronoi(12, 0.8).invert().out(o7)`;
+    }
+
     function loadState() {
       const savedCode = localStorage.getItem("my_hydra_code_ngon");
-      document.getElementById("hydra-code").value = savedCode || DEFAULT_CODE;
+      document.getElementById("hydra-code").value = savedCode || getFallbackCode();
 
       const savedSurfaces = localStorage.getItem("my_hydra_surfaces_ngon");
       if (savedSurfaces) {
-        surfaces = JSON.parse(savedSurfaces);
+        try {
+          surfaces = JSON.parse(savedSurfaces);
+        } catch (err) {
+          surfaces = getFallbackSurfaces();
+        }
       } else {
-        surfaces = [
-          { id: Date.now(), buffer: "o0", pts: createRegularPolygon(3, 550, 300, 140) },
-          { id: Date.now() + 1, buffer: "o1", pts: createRegularPolygon(6, 900, 300, 140) }
-        ];
+        surfaces = getFallbackSurfaces();
+        saveSurfaces();
       }
       renderSurfaceUI();
     }
