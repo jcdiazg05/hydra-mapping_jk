@@ -25,7 +25,6 @@
       padding: 12px;
       z-index: 100;
       box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-      transition: opacity 0.2s ease;
     }
 
     #ui-header {
@@ -105,9 +104,10 @@
     .shortcuts b { color: #ccc; }
   </style>
 
-  <!-- Librerías principales -->
-  <script src="https://unpkg.com/hydra-synth"></script>
+  <!-- 1. Cargar p5.js primero -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <!-- 2. Cargar Hydra después para que tome el control global -->
+  <script src="https://unpkg.com/hydra-synth"></script>
 </head>
 <body>
 
@@ -134,9 +134,6 @@
   </div>
 
   <script>
-    // ==========================================
-    // 1. CONFIGURACIÓN INICIAL Y ESTADO
-    // ==========================================
     const DEFAULT_CODE = `// Salida o0 (Cara 1)
 osc(15, 0.1, 0.8).rotate(0.4).kaleid(4).out(o0)
 
@@ -149,7 +146,6 @@ noise(3, 0.2).posterize(4).color(1, 0.2, 0.5).out(o2)
 // Salida o3 (Cara 4)
 shape(4, 0.5, 0.01).repeat(3, 3).rotate(() => time * 0.5).out(o3)
 
-// Renderiza los 4 buffers en cuadrícula interna para mapearlos
 render()`;
 
     const BUFFER_UVS = {
@@ -163,9 +159,7 @@ render()`;
     let calibrating = true;
     let selectedPoint = null;
 
-    // ==========================================
-    // 2. MOTOR HYDRA (Único dueño del entorno global)
-    // ==========================================
+    // Inicializar Hydra y forzar todas sus funciones en window
     const hydraCanvas = document.createElement("canvas");
     hydraCanvas.width = 1280;
     hydraCanvas.height = 720;
@@ -175,6 +169,11 @@ render()`;
       detectAudio: true,
       makeGlobal: true
     });
+
+    // Asegurar explícitamente que synth y sus funciones (osc, noise, voronoi, etc.) sean globales
+    if (hydra.synth) {
+      Object.assign(window, hydra.synth);
+    }
 
     window.loadScript = (url) => {
       return new Promise((resolve, reject) => {
@@ -204,9 +203,6 @@ render()`;
       badge.style.color = color;
     }
 
-    // ==========================================
-    // 3. GESTIÓN DE SUPERFICIES (QUADS)
-    // ==========================================
     function loadState() {
       const savedCode = localStorage.getItem("my_hydra_code");
       document.getElementById("hydra-code").value = savedCode || DEFAULT_CODE;
@@ -303,9 +299,6 @@ render()`;
       }
     }
 
-    // ==========================================
-    // 4. MOTOR P5.JS EN MODO INSTANCIA
-    // ==========================================
     new p5((p) => {
       let hydraGraphics;
 
@@ -383,9 +376,6 @@ render()`;
       };
     });
 
-    // ==========================================
-    // 5. ATAJOS DE TECLADO
-    // ==========================================
     document.getElementById("hydra-code").addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.key === "Enter") {
         e.preventDefault();
